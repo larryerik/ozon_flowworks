@@ -157,7 +157,7 @@ def gen_statistics_report(from_date: str, to_date: str, access_token: str, campa
         logger.error(f"生成模板报告时发生异常: {str(e)}")
         raise
 
-@task(retries=6, retry_delay_seconds=300)
+@task(retries=10, retry_delay_seconds=300)
 def get_report_data(uuid: str, access_token: str, client_id: str, client_secret: str) -> Tuple[str, str]:
     """获取报告数据链接"""
     logger = get_run_logger()
@@ -169,9 +169,9 @@ def get_report_data(uuid: str, access_token: str, client_id: str, client_secret:
     }
     try:
         response, new_token = make_request_with_retry('GET', url, headers, client_id, client_secret)
+        logger.error(f"获取报告数据response信息: {response.status_code} {response.text}")
         if response.status_code == 200:
             return 'https://api-performance.ozon.ru:443' + response.json()['link'], new_token
-        logger.error(f"获取报告数据失败: {response.status_code} {response.text}")
         raise Exception("获取报告数据失败")
     except Exception as e:
         logger.error(f"获取报告数据时发生异常: {str(e)}")
@@ -303,7 +303,7 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
             group = campaign_list[i:i+10]
             logger.info(f"处理广告组 {i//10 + 1}/{(len(campaign_list)-1)//10 + 1}, 广告ID: {group}")
             report_uuid, access_token = gen_statistics_report(yesterday, yesterday, access_token, group, client_id, client_secret)
-            report_data_list.append((report_uuid, access_token))
+            report_data_list.append((report_uuid))
             
         
         # 下载搜索广告数据
@@ -320,8 +320,8 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
         
         # 下载模板广告数据
         all_campaign_data = pd.DataFrame()
-        for uuid, token in report_data_list:
-            report_data_link, access_token = get_report_data(uuid, token, client_id, client_secret)
+        for uuid in report_data_list:
+            report_data_link, access_token = get_report_data(uuid, access_token, client_id, client_secret)
             campaign_data = process_campaign_data(report_data_link, access_token, campaign_df, store_name, client_id, client_secret)
             all_campaign_data = pd.concat([all_campaign_data, campaign_data], ignore_index=True)
             logger.info(f"成功处理模板广告数据，当前总数据量: {len(all_campaign_data)}行")
@@ -339,7 +339,5 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
         raise
 
 if __name__ == "__main__":
-    STORE_NAME = "个人世界"
-    client_id = "64346380-1745561799224@advertising.performance.ozon.ru"
-    client_secret = "_71BQbnTk7si-81BJ8WWf_qBkrzOosv7Mlu_OjSZcO3zL-AfQzdDBVLFsvKCAknJIamOpV4-Xpn3VG5Cdg"
+    
     ozon_ad_data_collection(STORE_NAME, client_id, client_secret)
