@@ -9,6 +9,7 @@ from prefect.tasks import task_input_hash
 from typing import List, Dict, Optional, Tuple
 from functools import partial
 import logging
+from zoneinfo import ZoneInfo
 
 # 配置日志
 logging.basicConfig(
@@ -284,7 +285,9 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
     
     try:
         # 获取昨天的日期
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        # 设置时区为莫斯科
+        moscow_tz = ZoneInfo("Europe/Moscow")
+        yesterday = (datetime.now(moscow_tz) - timedelta(days=1)).strftime('%Y-%m-%d')
         logger.info(f"处理日期: {yesterday}")
         
         # 获取token
@@ -339,5 +342,7 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
         raise
 
 if __name__ == "__main__":
-    
+    STORE_NAME = "个人世界"
+    client_id = "64346380-1745561799224@advertising.performance.ozon.ru"
+    client_secret = "_71BQbnTk7si-81BJ8WWf_qBkrzOosv7Mlu_OjSZcO3zL-AfQzdDBVLFsvKCAknJIamOpV4-Xpn3VG5Cdg"
     ozon_ad_data_collection(STORE_NAME, client_id, client_secret)
