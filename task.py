@@ -3,7 +3,7 @@ import requests
 import time
 import io
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
 from prefect import task, flow, get_run_logger
 from prefect.tasks import task_input_hash
 from typing import List, Dict, Optional, Tuple
@@ -158,7 +158,7 @@ def gen_statistics_report(from_date: str, to_date: str, access_token: str, campa
         logger.error(f"生成模板报告时发生异常: {str(e)}")
         raise
 
-@task(retries=10, retry_delay_seconds=300)
+@task(retries=8, retry_delay_seconds=300)
 def get_report_data(uuid: str, access_token: str, client_id: str, client_secret: str) -> Tuple[str, str]:
     """获取报告数据链接"""
     logger = get_run_logger()
@@ -170,9 +170,9 @@ def get_report_data(uuid: str, access_token: str, client_id: str, client_secret:
     }
     try:
         response, new_token = make_request_with_retry('GET', url, headers, client_id, client_secret)
-        logger.error(f"获取报告数据response信息: {response.status_code} {response.text}")
         if response.status_code == 200:
             return 'https://api-performance.ozon.ru:443' + response.json()['link'], new_token
+        logger.error(f"获取报告数据失败: {response.status_code} {response.text}")
         raise Exception("获取报告数据失败")
     except Exception as e:
         logger.error(f"获取报告数据时发生异常: {str(e)}")
@@ -233,14 +233,21 @@ def process_campaign_data(csv_link: str, access_token: str, campaign_df: pd.Data
     try:
         response, new_token = make_request_with_retry('GET', csv_link, headers, client_id, client_secret)
         if response.status_code == 200:
-            zip_file = zipfile.ZipFile(io.BytesIO(response.content))
-            df_all = pd.DataFrame()
-            for file_name in zip_file.namelist():
-                with zip_file.open(file_name) as file:
-                    df = pd.read_csv(file, sep=';', decimal=',', header=1, skipfooter=1, engine='python')
-                    df['广告ID'] = file_name.split('_')[0]
-                    df_all = pd.concat([df_all, df], ignore_index=True)
-            
+            content_type = response.headers.get('Content-Type', '').lower()
+
+            if 'zip' in content_type:
+                
+                zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+                df_all = pd.DataFrame()
+                for file_name in zip_file.namelist():
+                    with zip_file.open(file_name) as file:
+                        df = pd.read_csv(file, sep=';', decimal=',', header=1, skipfooter=1, engine='python')
+                        df['广告ID'] = file_name.split('_')[0]
+                        df_all = pd.concat([df_all, df], ignore_index=True)
+            elif 'csv' in content_type:
+                df_all = pd.read_csv(io.BytesIO(response.content), sep=';', decimal=',', header=1, skipfooter=1, engine='python')
+                df_all['广告ID'] = response.headers.get('Content-Disposition').split('"')[-2].split('_')[0]
+
             df_all = df_all.merge(campaign_df, left_on='广告ID', right_on='id', how='left')
             df_all['店铺'] = store_name
             df_all.rename(columns={
@@ -285,8 +292,7 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
     
     try:
         # 获取昨天的日期
-        # 设置时区为莫斯科
-        moscow_tz = ZoneInfo("Europe/Moscow")
+        moscow_tz = ZoneInfo('Europe/Moscow')
         yesterday = (datetime.now(moscow_tz) - timedelta(days=1)).strftime('%Y-%m-%d')
         logger.info(f"处理日期: {yesterday}")
         
@@ -342,7 +348,7 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
         raise
 
 if __name__ == "__main__":
-    STORE_NAME = "个人世界"
-    client_id = "64346380-1745561799224@advertising.performance.ozon.ru"
-    client_secret = "_71BQbnTk7si-81BJ8WWf_qBkrzOosv7Mlu_OjSZcO3zL-AfQzdDBVLFsvKCAknJIamOpV4-Xpn3VG5Cdg"
+    STORE_NAME = "个人舒适"
+    client_id = "27647664-1715061218798@advertising.performance.ozon.ru"
+    client_secret = "EMWQQP--bsaqW6u2t6Anct_Iox7lILlS0wdBsf1BC4tW5qt4hj-WZn1mdmkSYGcJxqsFwdbOLCsqCfxUGA"
     ozon_ad_data_collection(STORE_NAME, client_id, client_secret)
