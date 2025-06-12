@@ -348,7 +348,7 @@ def ozon_ad_data_collection(store_name: str, client_id: str, client_secret: str)
         raise
 
 if __name__ == "__main__":
-    STORE_NAME = "个人舒适"
-    client_id = "27647664-1715061218798@advertising.performance.ozon.ru"
-    client_secret = "EMWQQP--bsaqW6u2t6Anct_Iox7lILlS0wdBsf1BC4tW5qt4hj-WZn1mdmkSYGcJxqsFwdbOLCsqCfxUGA"
+    STORE_NAME = ""
+    client_id = ""
+    client_secret = ""
     ozon_ad_data_collection(STORE_NAME, client_id, client_secret)
